@@ -17,11 +17,15 @@ npm run dev
 ## Data flow
 
 - `scripts/github-index.ts` resolves the latest `main` commit of each export repository independently and discovers V2 survey JSON under `YYYY-MM-DD/survey/`. It validates the date and UTC stamp against the UUIDv7 in each filename. If the recursive Git tree is truncated, discovery walks the dated survey directories.
-- `scripts/generate-index.ts` atomically writes the ignored `public/survey-index.json`. Each source carries its commit SHA, and each survey entry contains only its path, completion status and optional export time. Generation keeps the previous index if either source fails.
+- `scripts/generate-index.ts` atomically writes the ignored `public/survey-index.json`. Each source carries its commit SHA. Survey entries contain the path, completion status, optional export time, and optional numeric answer, follow-up and audio counts. Generation keeps the previous index if either source fails.
 - The browser fetches the selected JSON and individual WAVs from the source's pinned commit on `raw.githubusercontent.com`. WAV references must match the survey's date, device and UUID, the recording ID, and the exporter's question segment or SHA-256 fallback. A newly uploaded WAV or survey appears after the index is refreshed.
 - Each WAV has its own player, recording ID, prompt association and transcription result when those fields are available. Follow-up positions are one-based. Early V2 records can expose the recording UUID in the WAV filename while omitting prompt kind and transcription fields. The viewer displays those fields as unavailable and preserves the JSON as supplied for inspection.
 
 The contract was verified against [Survey2026 main at d6951dd](https://github.com/ishizuki-tech/Survey2026/tree/d6951dd2af491fab443139a750cfd228b5632303), including `V2ArtifactPaths.kt`, `SurveyExportJsonBuilder.kt`, `RecordingPrompt.kt`, and `SurveyRecordings.kt`. The data sources are [Production](https://github.com/ishizuki-tech/SurveyExports) and [Development](https://github.com/ishizuki-tech/SurveyExports-Dev).
+
+Search and the completion, UTC month, UTC date, device and survey filters all apply together. The viewer derives device tags from the validated filenames, so it can filter exports with no separate device metadata. Clear filters resets the filters and keeps the sort order.
+
+Answer counts include nonblank top-level answers, including Survey Notes. Follow-up counts include every history entry, including unanswered prompts. Audio counts include distinct, validated WAV references, including retakes and recordings awaiting upload. Missing or malformed count data appears as **Unknown** and sorts after known counts in either direction. Equal counts sort newest first.
 
 ## Verify
 

@@ -1,6 +1,6 @@
 import './style.css';
-import { filterSurveys, readCatalog } from './catalog.ts';
-import type { Catalog, SortOrder, SurveySummary } from './catalog.ts';
+import { filterSurveys, readCatalog, sortMetrics, sortOptions } from './catalog.ts';
+import type { Catalog, SortOrder, SurveyFilters, SurveySummary } from './catalog.ts';
 import { readSurvey, surveyStatus } from './contract.ts';
 import { element, statusBadge, surveyDetail } from './detail.ts';
 import { rawUrl, sources } from './paths.ts';
@@ -46,10 +46,24 @@ app.innerHTML = `
           </select>
         </label>
         <label>Sort by
-          <select id="sort" disabled>
-            <option value="newest">Newest first</option><option value="oldest">Oldest first</option>
-          </select>
+          <select id="sort" disabled></select>
         </label>
+        <label>Month (UTC)
+          <select id="month" disabled></select>
+        </label>
+        <label>Date (UTC)
+          <select id="date" disabled></select>
+        </label>
+        <label class="wide-filter">Device
+          <select id="device" disabled></select>
+        </label>
+        <label class="wide-filter">Survey
+          <select id="survey" disabled></select>
+        </label>
+      </div>
+      <div class="filter-footer">
+        <p id="active-filters" class="muted" role="status">No active filters</p>
+        <button type="button" id="clear-filters" class="view-button" disabled>Clear filters</button>
       </div>
       <p id="result-count" class="result-count" role="status"></p>
       <ul id="list" class="survey-list"></ul>
@@ -66,6 +80,12 @@ const source = document.querySelector<HTMLSelectElement>('#environment')!;
 const search = document.querySelector<HTMLInputElement>('#search')!;
 const status = document.querySelector<HTMLSelectElement>('#status')!;
 const sort = document.querySelector<HTMLSelectElement>('#sort')!;
+const month = document.querySelector<HTMLSelectElement>('#month')!;
+const date = document.querySelector<HTMLSelectElement>('#date')!;
+const device = document.querySelector<HTMLSelectElement>('#device')!;
+const survey = document.querySelector<HTMLSelectElement>('#survey')!;
+const activeFilters = document.querySelector('#active-filters')!;
+const clearFilters = document.querySelector<HTMLButtonElement>('#clear-filters')!;
 const list = document.querySelector<HTMLUListElement>('#list')!;
 const resultCount = document.querySelector('#result-count')!;
 const snapshot = document.querySelector('#snapshot')!;
@@ -73,6 +93,9 @@ const sourceLabel = document.querySelector('#source-label')!;
 const more = document.querySelector<HTMLButtonElement>('#more')!;
 const back = document.querySelector<HTMLAnchorElement>('.back-link')!;
 const detail = document.querySelector<HTMLDivElement>('#detail')!;
+const filterControls = [search, status, month, date, device, survey];
+const metricLabels = { answerCount: 'Answers', followupCount: 'Follow-ups', audioCount: 'Audio references' };
+sort.replaceChildren(...Object.entries(sortOptions).map(([value, label]) => new Option(label, value)));
 
 let catalog: Catalog;
 let environment: Environment = 'production';
@@ -134,7 +157,26 @@ async function openSurvey(summary: SurveySummary, focus: boolean) {
 
 function renderList() {
   const all = catalog.sources[environment].surveys;
-  const surveys = filterSurveys(all, search.value, surveyStatus(status.value) ?? '', sort.value as SortOrder);
+  const filters: SurveyFilters = {
+    query: search.value.trim(),
+    status: surveyStatus(status.value),
+    month: month.value,
+    date: date.value,
+    device: device.value,
+    path: survey.value,
+  };
+  const order = sort.value as SortOrder;
+  const metric = sortMetrics[order];
+  const surveys = filterSurveys(all, filters, order);
+  const active = [];
+  if (filters.query) active.push(`Search: ${filters.query}`);
+  if (filters.status) active.push(`Completion: ${status.selectedOptions[0].text}`);
+  if (filters.month) active.push(`Month: ${filters.month}`);
+  if (filters.date) active.push(`Date: ${filters.date}`);
+  if (filters.device) active.push(`Device: ${filters.device}`);
+  if (filters.path) active.push(`Survey: ${survey.selectedOptions[0].text}`);
+  activeFilters.textContent = active.length ? active.join(' · ') : 'No active filters';
+  clearFilters.disabled = active.length === 0;
   resultCount.textContent = `${surveys.length} of ${all.length} surveys`;
   more.hidden = surveys.length <= limit;
   const rows = surveys.slice(0, limit).map(summary => {
@@ -146,6 +188,9 @@ function renderList() {
     top.append(element('strong', '', summary.startedAt.slice(0, 16).replace('T', ' ') + ' UTC'),
       statusBadge(summary.status));
     button.append(top, element('span', 'row-device', summary.device), element('span', 'row-id', summary.id));
+    if (metric) {
+      button.append(element('span', 'muted', `${metricLabels[metric]}: ${summary[metric] ?? 'Unknown'}`));
+    }
     button.addEventListener('click', () => void openSurvey(summary, true));
     row.append(button);
     return row;
@@ -155,26 +200,46 @@ function renderList() {
   syncSelection();
 }
 
+function populateOptions(surveys: SurveySummary[]) {
+  function setValues(control: HTMLSelectElement, label: string, values: string[]) {
+    control.replaceChildren(new Option(label, ''), ...Array.from(new Set(values), value => new Option(value, value)));
+  }
+  const dates = surveys.map(item => item.date).sort().reverse();
+  setValues(month, 'All months', dates.map(day => day.slice(0, 7)));
+  setValues(date, 'All dates', dates);
+  setValues(device, 'All devices', surveys.map(item => item.device).sort());
+  survey.replaceChildren(new Option('All surveys', ''), ...filterSurveys(surveys, {}, 'newest')
+    .map(item => new Option(item.id, item.path)));
+}
+
+function resetFilters() {
+  for (const control of filterControls) control.value = '';
+  limit = pageSize;
+  renderList();
+}
+
 function updateSource() {
   pending?.abort();
   selected = undefined;
-  limit = pageSize;
   sourceLabel.textContent = `${sources[environment].label} archive`;
   const revision = catalog.sources[environment].revision;
   snapshot.textContent = `Snapshot ${revision.slice(0, 7)} · ${catalog.generatedAt.slice(0, 10)} UTC`;
-  search.value = '';
-  status.value = '';
+  populateOptions(catalog.sources[environment].surveys);
   back.hidden = true;
-  renderList();
+  resetFilters();
   message('Select a survey', 'Choose a record to see answers, follow-ups and recordings.');
 }
 
-for (const control of [search, status, sort]) {
+for (const control of [...filterControls, sort]) {
   control.addEventListener(control === search ? 'input' : 'change', () => {
     limit = pageSize;
     renderList();
   });
 }
+clearFilters.addEventListener('click', () => {
+  resetFilters();
+  search.focus();
+});
 source.addEventListener('change', () => {
   environment = source.value === 'development' ? 'development' : 'production';
   updateSource();
@@ -199,7 +264,7 @@ async function loadIndex() {
     });
     if (!response.ok) throw new Error('Could not load index.');
     catalog = readCatalog(await response.json());
-    for (const control of [source, search, status, sort]) control.disabled = false;
+    for (const control of [source, ...filterControls, sort]) control.disabled = false;
     updateSource();
   } catch {
     snapshot.textContent = 'Index unavailable';

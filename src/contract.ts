@@ -7,9 +7,12 @@ type TranscriptionStatus = 'success' | 'empty' | 'failed' | 'interrupted';
 
 export const noteId = '__home_free_text__';
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
 export function record(value: unknown): Record<string, unknown> {
-  return value && typeof value === 'object' && !Array.isArray(value)
-    ? value as Record<string, unknown> : {};
+  return isRecord(value) ? value : {};
 }
 
 function entries(value: unknown) {
@@ -133,3 +136,30 @@ export async function readSurvey(value: unknown, survey: SurveyPath) {
 }
 
 export type Survey = Awaited<ReturnType<typeof readSurvey>>;
+
+export const metricKeys = ['answerCount', 'followupCount', 'audioCount'] as const;
+export type Metric = typeof metricKeys[number];
+export type SurveyMetrics = Partial<Record<Metric, number>>;
+
+export async function readSurveyMetadata(value: unknown, route: SurveyPath) {
+  const { status, exportedAt, questions } = await readSurvey(value, route);
+  const data = record(value);
+  const answers = Object.values(record(data.answers));
+  const history = Object.values(record(data.followups));
+  const hasFile = (item: unknown) => typeof record(item).file === 'string';
+  const answerCount = isRecord(data.answers) && answers.every(item => typeof record(item).answer === 'string')
+    ? questions.filter(question => question.answer.trim()).length : undefined;
+  const followupCount = isRecord(data.followups) && history.every(items =>
+    Array.isArray(items) && items.every(item => typeof record(item).question === 'string' &&
+      typeof record(item).answer === 'string'))
+    ? questions.reduce((sum, question) => sum + question.followups.length, 0) : undefined;
+  const audioCount = Array.isArray(data.voice_files) && data.voice_files.every(item =>
+    hasFile(item) && typeof record(item).survey_id === 'string' && typeof record(item).question_id === 'string') &&
+    isRecord(data.answers) && answers.every(item => {
+      const { audio } = record(item);
+      return isRecord(item) && (audio === undefined || (Array.isArray(audio) && audio.every(hasFile)));
+    })
+    ? questions.reduce((sum, question) => sum + question.recordings.filter(recording => recording.path).length, 0)
+    : undefined;
+  return { status, exportedAt, answerCount, followupCount, audioCount };
+}

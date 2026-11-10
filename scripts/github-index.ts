@@ -1,4 +1,4 @@
-import { readHeader, record } from '../src/contract.ts';
+import { readSurveyMetadata, record } from '../src/contract.ts';
 import { commitSha, environments, rawUrl, sources, surveyPath } from '../src/paths.ts';
 import type { Environment } from '../src/paths.ts';
 
@@ -75,8 +75,7 @@ async function buildSource(env: Environment, request: Request, token?: string) {
   for (let i = 0; i < routes.length; i += 6) {
     const batch = await Promise.all(routes.slice(i, i + 6).map(async route => {
       const data = await githubJson(rawUrl(env, revision, route.path), request);
-      const { status, exportedAt } = readHeader(data, route);
-      return { path: route.path, status, exportedAt };
+      return { path: route.path, ...await readSurveyMetadata(data, route) };
     }));
     surveys.push(...batch);
   }

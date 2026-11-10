@@ -95,11 +95,11 @@ test('rejects wrong export identities and only permits valid recording paths', a
 test('validates index input and filters by ID, device, date and completion with stable sorting', () => {
   const catalog = readCatalog(index);
   const { surveys } = catalog.sources.production;
-  assert.deepEqual(filterSurveys(surveys, '', '', 'newest').map(x => x.id), [second.id, route.id]);
-  assert.deepEqual(filterSurveys(surveys, 'test-device 2026-11-08', '', 'oldest').map(x => x.id), [route.id, second.id]);
-  assert.deepEqual(filterSurveys(surveys, route.id.toUpperCase(), 'completed', 'newest').map(x => x.id), [route.id]);
-  assert.deepEqual(filterSurveys(surveys, '', 'incomplete', 'newest').map(x => x.id), [second.id]);
-  assert.equal(filterSurveys(surveys, 'buses', '', 'newest').length, 0);
+  assert.deepEqual(filterSurveys(surveys, {}, 'newest').map(x => x.id), [second.id, route.id]);
+  assert.deepEqual(filterSurveys(surveys, { query: 'test-device 2026-11-08' }, 'oldest').map(x => x.id), [route.id, second.id]);
+  assert.deepEqual(filterSurveys(surveys, { query: route.id.toUpperCase(), status: 'completed' }, 'newest').map(x => x.id), [route.id]);
+  assert.deepEqual(filterSurveys(surveys, { status: 'incomplete' }, 'newest').map(x => x.id), [second.id]);
+  assert.equal(filterSurveys(surveys, { query: 'buses' }, 'newest').length, 0);
   assert.equal(catalog.sources.development.surveys[0].id, dev.id);
   assert.throws(() => readCatalog({ ...index, version: 2 }), /Invalid/);
   const invalid = structuredClone(index);

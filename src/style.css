@@ -38,7 +38,10 @@ h1 span { color: #c3ecc6; margin-left: .2em; }
 .library h2, .detail h2 { font-size: clamp(1.55rem, 3vw, 2rem); letter-spacing: -.045em; line-height: 1.15; }
 .filters { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 20px; }
 .filters label { display: grid; min-width: 0; gap: 5px; color: var(--muted); font-size: .78rem; font-weight: 700; }
-.filters .search { grid-column: 1 / -1; }
+.filters .search, .filters .wide-filter { grid-column: 1 / -1; }
+.filter-footer { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; margin-top: 12px; }
+.filter-footer p { flex: 1 1 11rem; min-width: 0; overflow-wrap: anywhere; }
+.filter-footer button:disabled { opacity: .55; }
 .filters input, .filters select { width: 100%; min-width: 0; border: 1px solid var(--line); min-height: 42px; border-radius: 8px; padding: 6px 9px; background: #fbfcfa; color: #172821; font-weight: 500; font-size: .875rem; }
 .result-count { margin: 19px 0 8px; color: var(--muted); font-size: .8rem; }
 .survey-list { display: grid; gap: 6px; list-style: none; padding: 0; margin: 0; max-height: min(620px, 65vh); overflow: auto; scrollbar-gutter: stable; }

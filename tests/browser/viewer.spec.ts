@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { dev, exportFor, index, recordingIds, revision, route, second } from '../fixtures.ts';
+import { dev, exportFor, index, recordingIds, revision, route, routeAt, second } from '../fixtures.ts';
 
 const jsonHeaders = { 'access-control-allow-origin': '*' };
 
@@ -55,7 +55,7 @@ test('filters records, opens a response, plays a take, inspects raw JSON and swi
   await expect(page.getByText('No surveys match these filters.')).toBeVisible();
   await page.getByLabel('Search records').fill('synthetic 2026-11-08');
   await rows.first().click();
-  await expect(page.getByRole('heading', { name: 'Survey record' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Survey record', exact: true })).toBeVisible();
   await expect(page.getByText('AI outcome: accepted')).toBeVisible();
   await expect(page.getByText('<img src=x onerror=alert(1)>', { exact: false })).toBeVisible();
   await expect(page.locator('img')).toHaveCount(0);
@@ -96,6 +96,81 @@ test('recovers from a missing index and a failed survey fetch', async ({ page })
   await expect(page.getByRole('alert')).toContainText('Could not load this survey');
   await page.getByRole('button', { name: 'Retry' }).click();
   await expect(page.locator('.detail-header')).toContainText(second.id);
+});
+
+test('combines and clears index filters and rebuilds options for each export source', async ({ page }) => {
+  const other = routeAt(30 * 86400, 'SYNTHETIC_Other');
+  await page.route('**/SurveyViewerV2/survey-index.json', request => request.fulfill({
+    json: {
+      ...index,
+      sources: {
+        ...index.sources,
+        production: { ...index.sources.production, surveys: [
+          ...index.sources.production.surveys, { path: other.path, status: 'completed', answerCount: 0 },
+        ] },
+      },
+    },
+  }));
+  const detailRequests: string[] = [];
+  page.on('request', request => {
+    if (request.url().startsWith('https://raw.githubusercontent.com/')) detailRequests.push(request.url());
+  });
+  await page.goto('./');
+  const rows = page.locator('.survey-row');
+  const month = page.getByLabel('Month (UTC)');
+  const date = page.getByLabel('Date (UTC)');
+  const device = page.getByRole('combobox', { name: 'Device', exact: true });
+  const survey = page.getByRole('combobox', { name: 'Survey', exact: true });
+  const sort = page.getByLabel('Sort by');
+  const search = page.getByLabel('Search records');
+  const completion = page.getByLabel('Completion');
+  const summary = page.locator('#active-filters');
+  const clear = page.getByRole('button', { name: 'Clear filters' });
+  await expect(rows).toHaveCount(3);
+  await expect(clear).toBeDisabled();
+  await expect(sort.locator('option')).toHaveText([
+    'Newest first', 'Oldest first', 'Most answers', 'Fewest answers',
+    'Most follow-ups', 'Fewest follow-ups', 'Most audio', 'Fewest audio',
+  ]);
+  await sort.selectOption('fewest-answers');
+  await expect(rows.first()).toContainText(other.id);
+  await expect(rows.first()).toContainText('Answers: 0');
+  await expect(rows.last()).toContainText('Answers: Unknown');
+
+  await month.selectOption('2026-12');
+  await expect(rows).toHaveCount(1);
+  await expect(rows.first()).toContainText(other.id);
+  await date.selectOption(route.date);
+  await expect(page.getByText('No surveys match these filters.')).toBeVisible();
+  await month.selectOption('2026-11');
+  await device.selectOption(route.device);
+  await survey.selectOption(route.path);
+  await completion.selectOption('completed');
+  await search.fill('test-device');
+  await expect(rows).toHaveCount(1);
+  await expect(rows.first()).toContainText(route.id);
+  await expect(summary).toHaveText(
+    `Search: test-device · Completion: Completed · Month: 2026-11 · Date: ${route.date} · Device: ${route.device} · Survey: ${route.id}`,
+  );
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+
+  await clear.click();
+  await expect(rows).toHaveCount(3);
+  for (const control of [search, completion, month, date, device, survey]) await expect(control).toHaveValue('');
+  await expect(sort).toHaveValue('fewest-answers');
+  await expect(summary).toHaveText('No active filters');
+  await expect(clear).toBeDisabled();
+  await device.selectOption(route.device);
+  await page.getByLabel('Export source').selectOption('development');
+  await expect(rows).toHaveCount(1);
+  await expect(rows.first()).toContainText(dev.id);
+  await expect(device.locator('option')).toHaveText(['All devices', dev.device]);
+  await expect(survey.locator('option')).toHaveText(['All surveys', dev.id]);
+  await expect(month.locator('option')).toHaveText(['All months', dev.date.slice(0, 7)]);
+  await expect(date.locator('option')).toHaveText(['All dates', dev.date]);
+  await expect(summary).toHaveText('No active filters');
+  await expect(sort).toHaveValue('fewest-answers');
+  expect(detailRequests).toEqual([]);
 });
 
 test('plays a late WAV after the published index moves to the commit that contains it', async ({ page }) => {

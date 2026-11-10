@@ -5,17 +5,17 @@ export const revision = '1'.repeat(40);
 export const device = 'SYNTHETIC_Test-Device';
 export const note = '__home_free_text__';
 
-export function routeAt(seconds: number) {
+export function routeAt(seconds: number, tag = device) {
   const time = new Date(Date.UTC(2026, 10, 8, 8, 0, seconds));
   const ms = time.valueOf().toString(16).padStart(12, '0');
   const id = `${ms.slice(0, 8)}-${ms.slice(8)}-7000-8000-000000000000`;
   const stamp = time.toISOString().slice(0, 19).replace('T', '_').replaceAll(':', '-') + 'Z';
-  return surveyPath(`2026-11-08/survey/${stamp}_survey_${device}_${id}.json`)!;
+  return surveyPath(`${stamp.slice(0, 10)}/survey/${stamp}_survey_${tag}_${id}.json`)!;
 }
 
 export const route = routeAt(0);
 export const second = routeAt(1);
-export const dev = routeAt(2);
+export const dev = routeAt(2, 'SYNTHETIC_Development');
 export const recordingIds = [1, 2, 3, 4, 5, 6].map(n =>
   `00000000-0000-4000-8000-00000000000${n}`,
 );
@@ -65,7 +65,7 @@ export const index = {
   generatedAt: '2026-11-08T09:00:00Z',
   sources: {
     production: { revision, surveys: [
-      { path: route.path, status: 'completed' }, { path: second.path, status: 'incomplete' },
+      { path: route.path, status: 'completed', answerCount: 2, followupCount: 2, audioCount: 5 }, { path: second.path, status: 'incomplete' },
     ] },
     development: { revision, surveys: [{ path: dev.path, status: 'incomplete' }] },
   },

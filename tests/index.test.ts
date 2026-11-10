@@ -67,7 +67,7 @@ test('serialized index emits only the explicit metadata allowlist', async () => 
   for (const source of Object.values(output.sources)) {
     assert.deepEqual(Object.keys(source).sort(), ['revision', 'surveys']);
     for (const summary of source.surveys) {
-      assert.deepEqual(Object.keys(summary).sort(), ['exportedAt', 'path', 'status']);
+      assert.deepEqual(Object.keys(summary).sort(), ['answerCount', 'audioCount', 'exportedAt', 'followupCount', 'path', 'status']);
     }
   }
   const json = JSON.stringify(output);
@@ -77,4 +77,33 @@ test('serialized index emits only the explicit metadata allowlist', async () => 
 test('fails generation when an indexed survey fetch fails', async () => {
   const { request } = githubFixture(true);
   await assert.rejects(buildIndex(request, secret), /HTTP 503/);
+});
+
+test('derives V2 counts without duplicating mirrors and distinguishes empty from unknown', async () => {
+  const { request } = githubFixture();
+  const data = exportFor();
+  Object.assign(data.answers, { unanswered: { question: 'Blank answer', answer: '  ' } });
+  data.answers.Q7.audio.push({ file: 'https://example.test/unsafe.wav' });
+  const custom: typeof fetch = async (input, init) => {
+    if (String(input).endsWith(route.path)) return Response.json(data);
+    return request(input, init);
+  };
+  const summary = async () => {
+    const index = await buildIndex(custom, secret).then(readCatalog);
+    return index.sources.production.surveys.find(item => item.path === route.path)!;
+  };
+  const first = await summary();
+  assert.equal(first.answerCount, 2);
+  assert.equal(first.followupCount, 2);
+  assert.equal(first.audioCount, 5);
+  Object.assign(data, { answers: {}, followups: {}, voice_files: [] });
+  const empty = await summary();
+  assert.equal(empty.answerCount, 0);
+  assert.equal(empty.followupCount, 0);
+  assert.equal(empty.audioCount, 0);
+  Object.assign(data, { answers: undefined, followups: { Q7: 'malformed' }, voice_files: undefined });
+  const unknown = await summary();
+  assert.equal(unknown.answerCount, undefined);
+  assert.equal(unknown.followupCount, undefined);
+  assert.equal(unknown.audioCount, undefined);
 });
