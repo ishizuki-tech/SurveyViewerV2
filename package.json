@@ -1,0 +1,25 @@
+{
+  "name": "survey-viewer-v2",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24.10"
+  },
+  "scripts": {
+    "dev": "vite",
+    "index": "node scripts/generate-index.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test tests/*.test.ts",
+    "test:live": "node --test tests/live.integration.ts",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test:browser": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.65.0",
+    "@types/node": "24.19.1",
+    "typescript": "5.9.3",
+    "vite": "7.3.7"
+  }
+}

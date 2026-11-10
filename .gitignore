@@ -1,0 +1,14 @@
+.DS_Store
+node_modules/
+dist/
+.vite/
+coverage/
+test-results/
+playwright-report/
+*.tsbuildinfo
+*.local
+.env
+.env.*
+npm-debug.log*
+public/survey-index.json
+public/.survey-index-*.tmp
